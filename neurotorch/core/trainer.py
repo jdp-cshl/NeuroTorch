@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from neurotorch.datasets.dataset import AlignedVolume, TorchVolume
 import torch.cuda
 import numpy as np
-import pickle
+#import pickle
 
 
 class Trainer(object):
@@ -15,7 +15,7 @@ class Trainer(object):
     """
     def __init__(self, net, inputs_volume, labels_volume, checkpoint=None,
                  optimizer=None, criterion=None, max_epochs=100000,
-                 gpu_device=None, eps=0.0001, net_filename="trained_net.bin"):
+                 gpu_device=None, net_filename="trained_net.bin"):
         """
         Sets up the parameters for training
 
@@ -23,8 +23,7 @@ class Trainer(object):
         :param inputs_volume: A PyTorch dataset containing inputs
         :param labels_volume: A PyTorch dataset containing corresponding labels
         """
-        self.eps = eps
-
+        
         self.net_filename = net_filename
 
         self.max_epochs = max_epochs
@@ -87,20 +86,16 @@ class Trainer(object):
         Trains the given neural network
         """
         num_epoch = 1
-        prev_loss = 100000
-        delta = prev_loss
-        while num_epoch <= self.max_epochs and abs(delta) >= self.eps:
+        while num_epoch <= self.max_epochs:
             for i, sample_batch in enumerate(self.data_loader):
-                if num_epoch > self.max_epochs or abs(delta) < self.eps:
+                if num_epoch > self.max_epochs:
                     break
                 loss = self.run_epoch(sample_batch)
-                delta = prev_loss - loss
-                prev_loss = loss
                 print("Epoch {}/{} ".format(num_epoch,
                                             self.max_epochs),
-                      "Loss: {:.4f}".format(loss), "Delta: {:.4f}".format(delta))
+                      "Loss: {:.4f}".format(loss))
                 num_epoch += 1
-        pickle.dump(self.net, self.net_filename)
+        #pickle.dump(self.net, self.net_filename)
 
 
 class TrainerDecorator(Trainer):
@@ -131,3 +126,4 @@ class TrainerDecorator(Trainer):
                                            self._trainer.max_epochs),
                       "Loss: {:.4f}".format(loss))
                 num_epoch += 1
+        #pickle.dump(self._trainer.net, self._trainer.net_filename)
