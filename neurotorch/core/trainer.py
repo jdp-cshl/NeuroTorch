@@ -6,8 +6,7 @@ from torch.utils.data import DataLoader
 from neurotorch.datasets.dataset import AlignedVolume, TorchVolume
 import torch.cuda
 import numpy as np
-#import pickle
-
+import pickle
 
 class Trainer(object):
     """
@@ -15,7 +14,7 @@ class Trainer(object):
     """
     def __init__(self, net, inputs_volume, labels_volume, checkpoint=None,
                  optimizer=None, criterion=None, max_epochs=100000,
-                 gpu_device=None, net_filename="trained_net.bin"):
+                 gpu_device=None, patience=None, net_filename="trained_net.bin"):
         """
         Sets up the parameters for training
 
@@ -27,6 +26,17 @@ class Trainer(object):
         self.net_filename = net_filename
 
         self.max_epochs = max_epochs
+
+        if patience is None:
+            self.patience = max_epochs
+        else:
+            self.patience = patience
+
+        self.best_score = None
+
+        self.patience_count = 0
+
+        self.best_net = None
 
         self.device = torch.device("cuda:{}".format(gpu_device)
                                    if gpu_device is not None
@@ -81,21 +91,39 @@ class Trainer(object):
 
         return loss_hist
 
+    def determine_early_stop(self, loss):
+        if self.best_score is None:
+            self.best_score = loss
+            self.best_net = self.net
+            return False
+
+        if loss < self.best_score:
+            self.patience_count = 0
+            self.best_score = loss
+            self.best_net = self.net
+            return False
+
+        self.patience_count += 1
+        return self.patience_count == self.patience
+
     def run_training(self):
         """
         Trains the given neural network
         """
         num_epoch = 1
-        while num_epoch <= self.max_epochs:
+        stop = False
+        while num_epoch <= self.max_epochs and not stop:
             for i, sample_batch in enumerate(self.data_loader):
-                if num_epoch > self.max_epochs:
+                if num_epoch > self.max_epochs or stop:
                     break
                 loss = self.run_epoch(sample_batch)
+                stop = self.determine_early_stop(loss)
                 print("Epoch {}/{} ".format(num_epoch,
                                             self.max_epochs),
-                      "Loss: {:.4f}".format(loss))
+                      "Loss: {:.4f} ".format(loss), "Best Score: {:.4f}".format(self.best_score))
                 num_epoch += 1
-        #pickle.dump(self.net, self.net_filename)
+        with open(self.net_filename, 'wb') as f:
+            pickle.dump(self.best_net, f)
 
 
 class TrainerDecorator(Trainer):
@@ -115,15 +143,21 @@ class TrainerDecorator(Trainer):
     def run_epoch(self, sample_batch):
         return self._trainer.run_epoch(sample_batch)
 
+    def determine_early_stop(self, loss):
+        return self._trainer.determine_early_stop(loss)
+
     def run_training(self):
         num_epoch = 1
-        while num_epoch <= self._trainer.max_epochs:
+        stop = False
+        while num_epoch <= self._trainer.max_epochs and not stop:
             for i, sample_batch in enumerate(self._trainer.data_loader):
-                if num_epoch > self._trainer.max_epochs:
+                if num_epoch > self._trainer.max_epochs or stop:
                     break
                 loss = self.run_epoch(sample_batch)
+                stop = self.determine_early_stop(loss)
                 print("Epoch {}/{}".format(num_epoch,
                                            self._trainer.max_epochs),
-                      "Loss: {:.4f}".format(loss))
+                      "Loss: {:.4f} ".format(loss), "Best Score: {:.4f}".format(self._trainer.best_score))
                 num_epoch += 1
-        #pickle.dump(self._trainer.net, self._trainer.net_filename)
+        with open(self._trainer.net_filename, 'wb') as f:
+            pickle.dump(self._trainer.best_net, f)
